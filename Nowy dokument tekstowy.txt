@@ -1,0 +1,128 @@
+void BuildSeedTable()
+    {
+        for (auto i = 0; i <= 255; i++) {
+            math::random_seed(i + 1);
+
+            const auto pi_seed = math::random_float(0.f, 6.283186f);
+
+            g_ctx.globals.m_computed_seeds.emplace_back(math::random_float(0.f, 1.f),
+                pi_seed);
+        }
+    }
+ta funkcja w aim.h
+i wywoływana
+main.cpp w init
+
+
+int aim::hitchance(const Vector& aim_angle)
+{
+    constexpr float HITCHANCE_MAX = 100.f;
+    constexpr int SEED_MAX = 255;
+    float finalHitchance;
+    int dmg = 0;
+    auto weapon_info = g_ctx.globals.weapon->get_csweapon_info();
+
+    Vector start{ g_ctx.globals.eye_pos }, end, fwd, right, up, dir, wepSpread;
+    float inaccuracy, spread;
+    trace_t tr;
+    size_t totalHits{ }, neddedHits{ (size_t)std::ceil((g_cfg.ragebot.weapon[g_ctx.globals.current_weapon].hitchance_amount * SEED_MAX) / HITCHANCE_MAX) };
+
+    if (m_cvar()->FindVar(crypt_str("weapon_accuracy_nospread"))->GetBool())
+        return 100;
+
+    math::angle_vectors(aim_angle, &fwd, &right, &up);
+    math::fast_vec_normalize(fwd);
+    math::fast_vec_normalize(right);
+    math::fast_vec_normalize(up);
+    inaccuracy = g_ctx.globals.weapon->get_inaccuracy();
+    spread = g_ctx.globals.weapon->get_spread();
+
+    g_ctx.globals.weapon->update_accuracy_penality();
+
+    for (int i{ }; i <= SEED_MAX; i++)
+    {
+        wepSpread = CalculateSpread(i, inaccuracy, spread);
+
+        dir = (fwd + (right * wepSpread.x) + (up * wepSpread.y)).Normalized();
+
+        end = start + (dir * g_ctx.globals.weapon->get_csweapon_info()->flRange);
+
+        Vector viewForward = g_ctx.local()->get_shoot_position() + (viewForward * g_ctx.globals.weapon->get_csweapon_info()->flRange);
+
+        m_trace()->ClipRayToEntity(Ray_t(g_ctx.local()->get_shoot_position(), viewForward), MASK_SHOT | CONTENTS_GRATE, final_target.record->player, &tr);
+
+        if (hitbox_intersection(final_target.record->player, final_target.record->matrixes_data.main, final_target.data.hitbox, start, end))
+            totalHits++;
+
+        if (!(SEED_MAX - i + totalHits) < neddedHits)
+            finalHitchance = (int)((float)totalHits / 2.55f);
+        else
+            finalHitchance = 0;
+    }
+    return finalHitchance;
+}
+    __forceinline Vector CalculateSpread(int seed, float inaccuracy, float spread)
+    {
+        auto wepInfo = g_ctx.globals.weapon->get_csweapon_info();
+        int itemDefIndex;
+        float recoilIndex, r1, r2, r3, r4, s1, c1, s2, c2;
+
+        if (!wepInfo || !wepInfo->iBullets)
+            return { };
+
+        itemDefIndex = g_ctx.globals.weapon->m_iItemDefinitionIndex();
+        recoilIndex = wepInfo->iRecoilSeed;
+
+        r1 = std::get<0>(g_ctx.globals.m_computed_seeds[seed]);
+        r2 = std::get<1>(g_ctx.globals.m_computed_seeds[seed]);
+        r3 = std::get<0>(g_ctx.globals.m_computed_seeds[seed]);
+        r4 = std::get<1>(g_ctx.globals.m_computed_seeds[seed]);
+
+        if (itemDefIndex == WEAPON_NEGEV && recoilIndex < 3.f)
+        {
+            for (int i{ 3 }; i > recoilIndex; i--)
+            {
+                r1 *= r1;
+                r3 *= r3;
+            }
+
+            r1 = 1.f - r1;
+            r3 = 1.f - r3;
+        }
+
+        c1 = std::cos(r2);
+        c2 = std::cos(r4);
+        s1 = std::sin(r2);
+        s2 = std::sin(r4);
+
+        return {
+            (c1 * (r1 * inaccuracy)) + (c2 * (r3 * spread)),
+            (s1 * (r1 * inaccuracy)) + (s2 * (r3 * spread)),
+            0.f
+        };
+    }
+
+
+
+float cl_forwardspeed = g_cfg.ragebot.teleport_speed;
+        float cl_sidespeed = g_cfg.ragebot.teleport_speed;
+        bool staying = fabs(g_ctx.globals.original_forwardmove) < 20.f && fabs(g_ctx.globals.original_sidemove) < 20.f;
+
+
+        if (g_cfg.ragebot.teleport_speed <= 20 || g_ctx.globals.weapon->get_inaccuracy() > 0.02f || staying)
+        {
+            cmd->m_forwardmove = 0.0f;
+            cmd->m_sidemove = 0.0f;
+        }
+        else
+        {
+            if (g_ctx.globals.original_forwardmove >= 5.0f)
+                cmd->m_forwardmove = cl_forwardspeed;
+            else if (g_ctx.globals.original_forwardmove <= -5.0f)
+                cmd->m_forwardmove = -cl_forwardspeed;
+
+            if (g_ctx.globals.original_sidemove >= 5.0f)
+                cmd->m_sidemove = cl_sidespeed;
+            else if (g_ctx.globals.original_sidemove <= -5.0f)
+                cmd->m_sidemove = -cl_sidespeed;
+        }
